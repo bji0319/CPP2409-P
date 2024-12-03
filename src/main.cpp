@@ -18,24 +18,28 @@ public:
     int gold;
     int playtime;
     bool win;
+    int cs;             
+    int wardsPlaced;    
+    int wardsCleared;   
+    int visionScore;    
+    int level;          
 
-    // 생성자
-    Match(const string& name, const string& r, const string& c, int k, int d, int a, int dmg, int g, int pt, bool w)
-        : playerName(name), role(r), champion(c), kills(k), deaths(d), assists(a), damage(dmg), gold(g), playtime(pt), win(w){}
+    
+    Match(const string& name, const string& r, const string& c, int k, int d, int a, int dmg, int g, int pt, bool w, int cs, int wp, int wc, int vs, int lvl)
+        : playerName(name), role(r), champion(c), kills(k), deaths(d), assists(a), damage(dmg), gold(g),
+          playtime(pt), win(w), cs(cs), wardsPlaced(wp), wardsCleared(wc), visionScore(vs), level(lvl) {}
 
     // 데이터를 파일에 저장할 수 있게 문자열로 변환
     string toString() const {
         return playerName + " " + role + " " + champion + " " + 
                to_string(kills) + " " + to_string(deaths) + " " +
-               to_string(assists) + " " + to_string(damage) + " " +
-               (win ? "1" : "0");
+               to_string(assists) + " " + to_string(damage) + " " + to_string(gold) + " " +
+               to_string(playtime) + " " + (win ? "1" : "0") + " " +
+               to_string(cs) + " " + to_string(wardsPlaced) + " " +
+               to_string(wardsCleared) + " " + to_string(visionScore) + " " + to_string(level);
     }
-    // KDA 계산
-    double getKDA() const {
-        return (deaths == 0) ? (kills + assists) : static_cast<double>(kills + assists) / deaths;
-    }
-
 };
+
 
 class StatsTracker {
 private:
@@ -68,17 +72,22 @@ public:
     void loadMatches() {
         ifstream inFile(filename);
         string line;
-        
-        while (getline(inFile, line)) {
-            stringstream ss(line);
-            string playerName, role, champion;
-            int kills, deaths, assists, damage, gold, playtime;
-            bool win;
 
-            ss >> playerName >> role >> champion >> kills >> deaths >> assists >> damage >> gold >> playtime >> win;
-            matches.push_back(Match(playerName, role, champion, kills, deaths, assists, damage, gold, playtime, win));
-        }
+    while (getline(inFile, line)) {
+        stringstream ss(line);
+        string playerName, role, champion;
+        int kills, deaths, assists, damage, gold, playtime, cs, wardsPlaced, wardsCleared, visionScore, level;
+        bool win;
+
+        // 파일에서 모든 데이터를 순서대로 읽어옴
+        ss >> playerName >> role >> champion >> kills >> deaths >> assists >> damage >> gold 
+           >> playtime >> win >> cs >> wardsPlaced >> wardsCleared >> visionScore >> level;
+
+        // Match 객체를 생성하여 벡터에 추가
+        matches.push_back(Match(playerName, role, champion, kills, deaths, assists, damage, gold, playtime, win, cs, wardsPlaced, wardsCleared, visionScore, level));
     }
+}
+
    
    // 특정 플레이어의 평균 분당 데미지 계산
     double calculateAverageDamagePerMinute(const string& playerName) {
@@ -141,7 +150,7 @@ int main() {
     char moreData;
 
     do {
-     string matchID;
+        string matchID;
         cout << "Enter match ID (e.g., match1, match2, etc.): ";
         cin >> matchID;
         cin.ignore();
@@ -160,30 +169,36 @@ int main() {
         // 블루팀 데이터 입력
         for (int i = 1; i <= 5; ++i) {
             string inputLine, playerName, role, champion;
-            int kills, deaths, assists, damage, gold;
+            int kills, deaths, assists, damage, gold, cs, wardsPlaced, wardsCleared, visionScore, level;
 
-            cout << "Enter data for Blue Team Player " << i << " (format: Name Role Champion Kills Deaths Assists Damage Gold): ";
+            cout << "Enter data for Blue Team Player " << i 
+                 << " (format: Name Role Champion Kills Deaths Assists Damage Gold CS WardsPlaced WardsCleared VisionScore Level): ";
             getline(cin, inputLine);
 
             stringstream ss(inputLine);
-            ss >> playerName >> role >> champion >> kills >> deaths >> assists >> damage >> gold;
+            ss >> playerName >> role >> champion >> kills >> deaths >> assists >> damage >> gold 
+               >> cs >> wardsPlaced >> wardsCleared >> visionScore >> level;
 
-            tracker.addMatch(Match(playerName, role, champion, kills, deaths, assists, damage, gold, playtime, blueTeamWin));
+            // 블루 팀 데이터 추가
+            tracker.addMatch(Match(playerName, role, champion, kills, deaths, assists, damage, gold, playtime, blueTeamWin, cs, wardsPlaced, wardsCleared, visionScore, level));
         }
 
         cout << "Entering data for Red Team:\n";
         // 레드팀 데이터 입력
         for (int i = 1; i <= 5; ++i) {
             string inputLine, playerName, role, champion;
-            int kills, deaths, assists, damage, gold;
+            int kills, deaths, assists, damage, gold, cs, wardsPlaced, wardsCleared, visionScore, level;
 
-            cout << "Enter data for Red Team Player " << i << " (format: Name Role Champion Kills Deaths Assists Damage Gold): ";
+            cout << "Enter data for Red Team Player " << i 
+                 << " (format: Name Role Champion Kills Deaths Assists Damage Gold CS WardsPlaced WardsCleared VisionScore Level): ";
             getline(cin, inputLine);
 
             stringstream ss(inputLine);
-            ss >> playerName >> role >> champion >> kills >> deaths >> assists >> damage >> gold;
+            ss >> playerName >> role >> champion >> kills >> deaths >> assists >> damage >> gold 
+               >> cs >> wardsPlaced >> wardsCleared >> visionScore >> level;
 
-            tracker.addMatch(Match(playerName, role, champion, kills, deaths, assists, damage, gold, playtime, !blueTeamWin));
+            // 레드 팀 데이터 추가 (레드팀은 반대 승리 조건)
+            tracker.addMatch(Match(playerName, role, champion, kills, deaths, assists, damage, gold, playtime, !blueTeamWin, cs, wardsPlaced, wardsCleared, visionScore, level));
         }
 
         // 새 매치를 더 입력할지 여부 묻기
