@@ -2,11 +2,12 @@
 #include <vector>
 #include <string>
 #include <sstream>
-#include <fstream> // 파일 입출력을 위한 라이브러리
+#include <fstream>
+#include <algorithm>
 
 using namespace std;
 
-class Match {
+class PlayerStats {
 public:
     string playerName;
     string role;
@@ -16,33 +17,54 @@ public:
     int assists;
     int damage;
     int gold;
+    int cs;
+    int wardsPlaced;
+    int wardsCleared;
+    int visionScore;
+    int level;
+
+    PlayerStats(const string& pName, const string& r, const string& c, int k, int d, int a,
+                int dmg, int g, int cs, int wp, int wc, int vs, int lv)
+        : playerName(pName), role(r), champion(c), kills(k), deaths(d), assists(a),
+          damage(dmg), gold(g), cs(cs), wardsPlaced(wp), wardsCleared(wc),
+          visionScore(vs), level(lv) {}
+};
+
+class Match {
+public:
+    string matchID;
+    vector<PlayerStats> blueTeam;
+    vector<PlayerStats> redTeam;
     int playtime;
-    bool win;
-    int cs;             
-    int wardsPlaced;    
-    int wardsCleared;   
-    int visionScore;    
-    int level;          
+    bool blueTeamWin;
 
-    Match(const string& name, const string& r, const string& c, int k, int d, int a, int dmg, int g, int pt, bool w, int cs, int wp, int wc, int vs, int lvl)
-        : playerName(name), role(r), champion(c), kills(k), deaths(d), assists(a), damage(dmg), gold(g),
-          playtime(pt), win(w), cs(cs), wardsPlaced(wp), wardsCleared(wc), visionScore(vs), level(lvl) {}
+    Match(const string& mID, const vector<PlayerStats>& bTeam, const vector<PlayerStats>& rTeam, int pt, bool bWin)
+        : matchID(mID), blueTeam(bTeam), redTeam(rTeam), playtime(pt), blueTeamWin(bWin) {}
 
-    // 데이터를 파일에 저장할 수 있게 문자열로 변환
     string toString() const {
-        return playerName + " " + role + " " + champion + " " + 
-               to_string(kills) + " " + to_string(deaths) + " " +
-               to_string(assists) + " " + to_string(damage) + " " + to_string(gold) + " " +
-               to_string(playtime) + " " + (win ? "1" : "0") + " " +
-               to_string(cs) + " " + to_string(wardsPlaced) + " " +
-               to_string(wardsCleared) + " " + to_string(visionScore) + " " + to_string(level);
+        stringstream ss;
+        ss << matchID << " " << playtime << " " << (blueTeamWin ? "1" : "0") << " ";
+
+        auto appendTeamData = [&ss](const vector<PlayerStats>& team) {
+            for (const auto& p : team) {
+                ss << p.playerName << " " << p.role << " " << p.champion << " "
+                   << p.kills << " " << p.deaths << " " << p.assists << " "
+                   << p.damage << " " << p.gold << " " << p.cs << " "
+                   << p.wardsPlaced << " " << p.wardsCleared << " " << p.visionScore << " " << p.level << " ";
+            }
+        };
+
+        appendTeamData(blueTeam);
+        appendTeamData(redTeam);
+
+        return ss.str();
     }
 };
 
 class StatsTracker {
 private:
     vector<Match> matches;
-    const string filename = "match_data.txt";
+    const string dataFilename = "match_data.txt";
 
 public:
     StatsTracker() {
@@ -53,142 +75,238 @@ public:
         saveMatches();
     }
 
-    // 경기 데이터 추가
     void addMatch(const Match& match) {
         matches.push_back(match);
     }
 
-    // 모든 경기 기록을 파일에 저장
     void saveMatches() const {
-        ofstream outFile(filename, ios::app); // Append mode
+        ofstream outFile(dataFilename, ios::trunc);
         for (const auto& match : matches) {
             outFile << match.toString() << endl;
         }
     }
 
-    // 파일에서 기존 경기 기록을 불러오기
     void loadMatches() {
-        ifstream inFile(filename);
+        ifstream inFile(dataFilename);
         string line;
 
         while (getline(inFile, line)) {
             stringstream ss(line);
-            string playerName, role, champion;
-            int kills, deaths, assists, damage, gold, playtime, cs, wardsPlaced, wardsCleared, visionScore, level;
-            bool win;
+            string mID;
+            int pt;
+            bool bWin;
 
-            ss >> playerName >> role >> champion >> kills >> deaths >> assists >> damage >> gold 
-               >> playtime >> win >> cs >> wardsPlaced >> wardsCleared >> visionScore >> level;
+            ss >> mID >> pt >> bWin;
 
-            matches.push_back(Match(playerName, role, champion, kills, deaths, assists, damage, gold, playtime, win, cs, wardsPlaced, wardsCleared, visionScore, level));
+            vector<PlayerStats> bTeam;
+            vector<PlayerStats> rTeam;
+
+            auto loadTeamData = [&ss]() {
+                vector<PlayerStats> team;
+                for (int i = 0; i < 5; ++i) {
+                    string pName, r, c;
+                    int k, d, a, dmg, g, cs, wp, wc, vs, lv;
+                    ss >> pName >> r >> c >> k >> d >> a >> dmg >> g >> cs >> wp >> wc >> vs >> lv;
+                    team.emplace_back(pName, r, c, k, d, a, dmg, g, cs, wp, wc, vs, lv);
+                }
+                return team;
+            };
+
+            bTeam = loadTeamData();
+            rTeam = loadTeamData();
+
+            matches.emplace_back(mID, bTeam, rTeam, pt, bWin);
         }
     }
 
     void displayAllMatches() const {
+        if (matches.empty()) {
+            cout << "No matches recorded.\n";
+            return;
+        }
+
+        cout << "\n[Match History]\n";
         for (const auto& match : matches) {
-            cout << match.toString() << endl;
+            cout << "Match ID: " << match.matchID << "\n";
+            cout << "Duration: " << match.playtime << " minutes\n";
+            cout << "Winner: " << (match.blueTeamWin ? "Blue Team" : "Red Team") << "\n";
+
+            cout << "\nBlue Team:\n";
+            for (const auto& p : match.blueTeam) {
+                cout << "  Player: " << p.playerName << ", Role: " << p.role << ", Champion: " << p.champion << "\n";
+                cout << "  Stats: " << p.kills << "/" << p.deaths << "/" << p.assists << ", Damage: " << p.damage
+                     << ", Gold: " << p.gold << ", CS: " << p.cs << "\n";
+                cout << "--------------------------------------\n";
+            }
+
+            cout << "\nRed Team:\n";
+            for (const auto& p : match.redTeam) {
+                cout << "  Player: " << p.playerName << ", Role: " << p.role << ", Champion: " << p.champion << "\n";
+                cout << "  Stats: " << p.kills << "/" << p.deaths << "/" << p.assists << ", Damage: " << p.damage
+                     << ", Gold: " << p.gold << ", CS: " << p.cs << "\n";
+                cout << "--------------------------------------\n";
+            }
+            cout << "============================================================\n";
         }
     }
 
     void displayPlayerStats(const string& playerName) const {
-        // 구현 필요
-        cout << "[Feature under development] Displaying stats for player: " << playerName << endl;
+        int totalKills = 0, totalDeaths = 0, totalAssists = 0;
+        int totalDamage = 0, totalPlaytime = 0;
+        int matchCount = 0;
+
+        for (const auto& match : matches) {
+            auto processTeam = [&](const vector<PlayerStats>& team) {
+                for (const auto& player : team) {
+                    if (player.playerName == playerName) {
+                        totalKills += player.kills;
+                        totalDeaths += player.deaths;
+                        totalAssists += player.assists;
+                        totalDamage += player.damage;
+                        totalPlaytime += match.playtime;
+                        matchCount++;
+                    }
+                }
+            };
+
+            processTeam(match.blueTeam);
+            processTeam(match.redTeam);
+        }
+
+        if (matchCount == 0) {
+            cout << "No stats found for player: " << playerName << "\n";
+            return;
+        }
+
+        double avgDamagePerMinute = totalPlaytime > 0 ? static_cast<double>(totalDamage) / totalPlaytime : 0.0;
+        double avgKDA = totalDeaths == 0 ? totalKills + totalAssists : static_cast<double>(totalKills + totalAssists) / totalDeaths;
+
+        cout << "\n[Player Statistics: " << playerName << "]\n";
+        cout << "Matches Played: " << matchCount << "\n";
+        cout << "Average Damage per Minute: " << avgDamagePerMinute << "\n";
+        cout << "Average KDA: " << avgKDA << "\n";
+    }
+
+    void displayChampionWinRate(const string& championName) const {
+        int totalGames = 0, totalWins = 0;
+
+        for (const auto& match : matches) {
+            auto processTeam = [&](const vector<PlayerStats>& team, bool isBlueWin) {
+                for (const auto& player : team) {
+                    if (player.champion == championName) {
+                        totalGames++;
+                        if (isBlueWin) totalWins++;
+                    }
+                }
+            };
+
+            processTeam(match.blueTeam, match.blueTeamWin);
+            processTeam(match.redTeam, !match.blueTeamWin);
+        }
+
+        if (totalGames == 0) {
+            cout << "No stats found for champion: " << championName << "\n";
+            return;
+        }
+
+        double winRate = static_cast<double>(totalWins) / totalGames * 100.0;
+        cout << "\n[Champion Statistics: " << championName << "]\n";
+        cout << "Win Rate: " << winRate << "%\n";
     }
 };
 
-void showMenu() {
-    cout << "\n===== Match Tracker Menu =====" << endl;
+void displayMenu() {
+    cout << "\n========================" << endl;
+    cout << "  Match History Menu" << endl;
+    cout << "========================" << endl;
     cout << "1. Enter Match Data" << endl;
     cout << "2. View Player Stats" << endl;
-    cout << "3. Exit Program" << endl;
-    cout << "=============================" << endl;
-    cout << "Select an option: ";
+    cout << "3. View Champion Win Rate" << endl;
+    cout << "4. Display All Matches" << endl;
+    cout << "5. Exit" << endl;
+    cout << "========================\n" << endl;
+    cout << "Choose an option: ";
+}
+
+void EnterMatchData(StatsTracker& tracker) {
+    string mID;
+    cout << "Enter match ID: ";
+    cin >> mID;
+    cin.ignore();
+
+    int pt;
+    cout << "Enter game duration (in minutes): ";
+    cin >> pt;
+    cin.ignore();
+
+    bool bWin;
+    cout << "Did the Blue Team win? (1 for Yes, 0 for No): ";
+    cin >> bWin;
+    cin.ignore();
+
+    vector<PlayerStats> bTeam, rTeam;
+
+    cout << "Enter data for Blue Team:\n";
+    for (int i = 1; i <= 5; ++i) {
+        string pName, r, c;
+        int k, d, a, dmg, g, cs, wp, wc, vs, lv;
+
+        cout << "Player " << i << " (Name Role Champ Kills Deaths Assists Damage Gold CS WardsPlaced WardsCleared VisionScore Level): ";
+        cin >> pName >> r >> c >> k >> d >> a >> dmg >> g >> cs >> wp >> wc >> vs >> lv;
+
+        bTeam.emplace_back(pName, r, c, k, d, a, dmg, g, cs, wp, wc, vs, lv);
+    }
+
+    cout << "Enter data for Red Team:\n";
+    for (int i = 1; i <= 5; ++i) {
+        string pName, r, c;
+        int k, d, a, dmg, g, cs, wp, wc, vs, lv;
+
+        cout << "Player " << i << " (Name Role Champ Kills Deaths Assists Damage Gold CS WardsPlaced WardsCleared VisionScore Level): ";
+        cin >> pName >> r >> c >> k >> d >> a >> dmg >> g >> cs >> wp >> wc >> vs >> lv;
+
+        rTeam.emplace_back(pName, r, c, k, d, a, dmg, g, cs, wp, wc, vs, lv);
+    }
+
+    tracker.addMatch(Match(mID, bTeam, rTeam, pt, bWin));
 }
 
 int main() {
     StatsTracker tracker;
-    bool running = true;
+    int choice;
 
-    while (running) {
-        showMenu();
-        int choice;
+    do {
+        displayMenu();
         cin >> choice;
-        cin.ignore();
 
         switch (choice) {
-        case 1: {
-            string matchID;
-            cout << "Enter match ID (e.g., match1, match2, etc.): ";
-            cin >> matchID;
-            cin.ignore();
-
-            int playtime;
-            cout << "Enter game duration (in minutes): ";
-            cin >> playtime;
-            cin.ignore();
-
-            bool blueTeamWin;
-            cout << "Did the Blue Team win? (1 for win, 0 for loss): ";
-            cin >> blueTeamWin;
-            cin.ignore();
-
-        cout << "Entering data for Blue Team:\n";
-        cout << "Entering data for Blue Team:\n";
-        // 블루팀 데이터 입력
-            cout << "Entering data for Blue Team:\n";
-        // 블루팀 데이터 입력
-            for (int i = 1; i <= 5; ++i) {
-                string inputLine, playerName, role, champion;
-                int kills, deaths, assists, damage, gold, cs, wardsPlaced, wardsCleared, visionScore, level;
-
-                cout << "Enter data for Blue Team Player " << i 
-                     << " (format: Name Role Champion Kills Deaths Assists Damage Gold CS WardsPlaced WardsCleared VisionScore Level): ";
-                getline(cin, inputLine);
-
-                stringstream ss(inputLine);
-                ss >> playerName >> role >> champion >> kills >> deaths >> assists >> damage >> gold 
-                   >> cs >> wardsPlaced >> wardsCleared >> visionScore >> level;
-
-                tracker.addMatch(Match(playerName, role, champion, kills, deaths, assists, damage, gold, playtime, blueTeamWin, cs, wardsPlaced, wardsCleared, visionScore, level));
-            }
-
-        cout << "Entering data for Red Team:\n";
-        cout << "Entering data for Red Team:\n";
-        // 레드팀 데이터 입력
-            cout << "Entering data for Red Team:\n";
-        // 레드팀 데이터 입력
-            for (int i = 1; i <= 5; ++i) {
-                string inputLine, playerName, role, champion;
-                int kills, deaths, assists, damage, gold, cs, wardsPlaced, wardsCleared, visionScore, level;
-
-                cout << "Enter data for Red Team Player " << i 
-                     << " (format: Name Role Champion Kills Deaths Assists Damage Gold CS WardsPlaced WardsCleared VisionScore Level): ";
-                getline(cin, inputLine);
-
-                stringstream ss(inputLine);
-                ss >> playerName >> role >> champion >> kills >> deaths >> assists >> damage >> gold 
-                   >> cs >> wardsPlaced >> wardsCleared >> visionScore >> level;
-
-                tracker.addMatch(Match(playerName, role, champion, kills, deaths, assists, damage, gold, playtime, !blueTeamWin, cs, wardsPlaced, wardsCleared, visionScore, level));
-            }
+        case 1:
+            EnterMatchData(tracker);
             break;
-        }
         case 2: {
-            string playerName;
-            cout << "Enter player name to view stats: ";
-            cin >> playerName;
-            tracker.displayPlayerStats(playerName);
+            string pName;
+            cout << "Enter player name: ";
+            cin >> pName;
+            tracker.displayPlayerStats(pName);
             break;
         }
         case 3: {
-            cout << "Exiting program. Goodbye!" << endl;
-            running = false;
+            string champName;
+            cout << "Enter champion name: ";
+            cin >> champName;
+            tracker.displayChampionWinRate(champName);
             break;
         }
+        case 4:
+            tracker.displayAllMatches();
+            break;
+        case 5:
+            cout << "Exiting program. Goodbye!\n";
+            break;
         default:
-            cout << "Invalid choice. Please select a valid option." << endl;
+            cout << "Invalid option. Please try again.\n";
         }
-    }
+    } while (choice != 5);
 
     return 0;
 }
